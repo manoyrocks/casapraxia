@@ -1,0 +1,353 @@
+openapi: 3.0.0
+info:
+  title: Praxia Child Client API
+  version: 1.0.0
+  description: |
+    Backend API for Praxia child client and clinician portal.
+
+    Core principles:
+    - Event-sourced, append-only architecture
+    - Conflict-free sync using UUIDv7 + device ID + monotonic sequence
+    - Clinician review surface with async video clips
+    - HIPAA-compliant with per-child encryption
+
+servers:
+  - url: https://api.praxia.io/v1
+    description: Production
+
+paths:
+  /sessions:
+    post:
+      summary: Create a new session
+      tags:
+        - Sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                childID:
+                  type: string
+                  description: Pseudonymous child ID
+                clinicianID:
+                  type: string
+                setting:
+                  type: string
+                  enum: [home, clinic, telehealth]
+              required: [childID, clinicianID, setting]
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+
+  /trials:
+    post:
+      summary: Record a trial (append-only)
+      tags:
+        - Trials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialEvent'
+      responses:
+        '201':
+          description: Trial recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventID:
+                    type: string
+                  serverTs:
+                    type: string
+                    format: date-time
+
+  /trials/sync:
+    post:
+      summary: Sync trial events (outbox pattern)
+      tags:
+        - Trials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                childID:
+                  type: string
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TrialEvent'
+      responses:
+        '200':
+          description: Sync complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appliedCount:
+                    type: integer
+                  nextCursor:
+                    type: string
+
+  /audio/upload:
+    post:
+      summary: Upload audio with consent verification
+      tags:
+        - Audio
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                childID:
+                  type: string
+                trialID:
+                  type: string
+                audio:
+                  type: string
+                  format: binary
+                  description: FLAC or Opus encoded audio
+                consentToken:
+                  type: string
+      responses:
+        '201':
+          description: Audio uploaded
+        '403':
+          description: Consent required
+
+  /targets:
+    get:
+      summary: Get active targets for a child
+      tags:
+        - Targets
+      parameters:
+        - name: childID
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Target list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+
+  /clips/review:
+    get:
+      summary: Get next clip for SLP review
+      tags:
+        - Clips
+      parameters:
+        - name: clinicianID
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Clip for review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClipForReview'
+
+    post:
+      summary: Submit SLP scoring
+      tags:
+        - Clips
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trialID:
+                  type: string
+                score:
+                  type: string
+                  enum: [correct, close, notYet]
+                ipaTranscription:
+                  type: string
+                cueNeeded:
+                  type: integer
+                  description: "0-5: actual level needed"
+              required: [trialID, score]
+      responses:
+        '200':
+          description: Score recorded
+
+  /compliance/consent:
+    post:
+      summary: Record granular consent
+      tags:
+        - Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                childID:
+                  type: string
+                purpose:
+                  type: string
+                  enum: [core_service, model_training, research_access]
+                granted:
+                  type: boolean
+                policyVersion:
+                  type: string
+              required: [childID, purpose, granted, policyVersion]
+      responses:
+        '201':
+          description: Consent recorded
+
+components:
+  schemas:
+    Session:
+      type: object
+      properties:
+        sessionID:
+          type: string
+          format: uuid
+        childID:
+          type: string
+        clinicianID:
+          type: string
+        setting:
+          type: string
+          enum: [home, clinic, telehealth]
+        createdAt:
+          type: string
+          format: date-time
+        trials:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrialEvent'
+
+    TrialEvent:
+      type: object
+      properties:
+        eventID:
+          type: string
+          format: uuidv7
+        childID:
+          type: string
+        sessionID:
+          type: string
+        trialID:
+          type: string
+        targetID:
+          type: string
+        eventType:
+          type: string
+          enum:
+            - stimulus_presented
+            - cue_given
+            - vocalization_detected
+            - attempt_recorded
+            - parent_scored
+            - slp_scored
+            - reinforcement_delivered
+            - cue_advanced
+            - cue_backed_off
+            - target_retired_safety
+        cueLevel:
+          type: integer
+          minimum: 0
+          maximum: 5
+        score:
+          type: string
+          enum: [correct, close, notYet]
+        parentScore:
+          type: string
+          enum: [correct, close, notYet]
+        attemptDuration:
+          type: number
+        snrDb:
+          type: number
+        clientTs:
+          type: string
+          format: date-time
+        serverTs:
+          type: string
+          format: date-time
+        deviceID:
+          type: string
+        appVersion:
+          type: string
+        protocolVersion:
+          type: string
+        modelVersion:
+          type: string
+
+    Target:
+      type: object
+      properties:
+        targetID:
+          type: string
+        name:
+          type: string
+        ipaTranscription:
+          type: string
+        currentLevel:
+          type: integer
+          minimum: 0
+          maximum: 5
+        retired:
+          type: boolean
+        successRate:
+          type: number
+          format: float
+
+    ClipForReview:
+      type: object
+      description: Asynchronous video clip for SLP review
+      properties:
+        trialID:
+          type: string
+        targetID:
+          type: string
+        audioURL:
+          type: string
+          format: uri
+        waveformData:
+          type: array
+          items:
+            type: number
+        spectrogramURL:
+          type: string
+          format: uri
+        priorAttempts:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              score:
+                type: string
+              ipaTranscription:
+                type: string
+        cueLevel:
+          type: integer
