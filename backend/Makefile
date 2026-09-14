@@ -1,4 +1,4 @@
-.PHONY: help build run test migrate fmt lint proto
+.PHONY: help build run test migrate fmt lint proto proto-clean proto-regen
 
 help:
 	@echo "Praxia Backend - Available targets:"
@@ -68,9 +68,26 @@ docker-logs:
 
 # Protobuf code generation
 proto:
-	@echo "Generating protobuf code..."
-	@which protoc > /dev/null || (echo "Error: protoc not found. Install protobuf compiler." && exit 1)
-	protoc --go_out=. --go-grpc_out=. protos/*.proto
+	@echo "Generating protobuf stubs from protos/*.proto..."
+	@which protoc > /dev/null || (echo "Error: protoc not found. Install: apt-get install protobuf-compiler" && exit 1)
+	@echo "Note: Requires Go >= 1.25 and plugins:"
+	@echo "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
+	@echo "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+	protoc \
+		--go_out=. \
+		--go-grpc_out=. \
+		--go_opt=paths=source_relative \
+		--go-grpc_opt=paths=source_relative \
+		protos/*.proto
+	@echo "✓ Protobuf stubs generated in pkg/gen/praxia/v1/"
+
+proto-clean:
+	@echo "Removing generated .pb.go files..."
+	find pkg/gen -name "*.pb.go" -delete
+	@echo "✓ Generated files cleaned"
+
+proto-regen: proto-clean proto
+	@echo "✓ Protobuf regeneration complete"
 
 # Code formatting
 fmt:
