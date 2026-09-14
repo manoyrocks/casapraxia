@@ -1,12 +1,13 @@
 import Foundation
 
 /// Mock trial service for local development and testing.
-/// Implements immediate success responses without network calls.
+/// Implements TrialServiceProtocol with immediate success responses (no network).
 ///
-/// Usage: Before Architect publishes gRPC stubs, use this for integration testing.
-/// Seamless swap: Replace with gRPC client when proto stubs available.
+/// Usage: For offline development and testing.
+/// Production: Replace with TrialServiceGRPCClient when building on macOS with gRPC stubs.
+/// See TrialServiceClient.swift for gRPC integration guide.
 @MainActor
-class LocalTrialServiceMock {
+class LocalTrialServiceMock: TrialServiceProtocol {
 
     /// Upload a session's trials to local cache (marked as synced)
     func uploadSession(

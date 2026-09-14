@@ -24,6 +24,7 @@ class SessionViewController: ObservableObject {
     private let trialEngine: TrialEngine
     private let audioManager: AudioCaptureManager
     private let trialStore: TrialStore
+    private let trialService: TrialServiceProtocol
     private let sessionID: String
 
     private var timerSubscription: AnyCancellable?
@@ -40,11 +41,13 @@ class SessionViewController: ObservableObject {
     init(
         trialEngine: TrialEngine,
         audioManager: AudioCaptureManager,
-        trialStore: TrialStore
+        trialStore: TrialStore,
+        trialService: TrialServiceProtocol
     ) {
         self.trialEngine = trialEngine
         self.audioManager = audioManager
         self.trialStore = trialStore
+        self.trialService = trialService
         self.sessionID = UUID().uuidString
     }
 
@@ -91,8 +94,60 @@ class SessionViewController: ObservableObject {
         // Final save
         saveSessionState()
 
+        // Upload session to backend (async, non-blocking)
+        uploadSessionAsync()
+
         // Cleanup
         cleanupResources()
+    }
+
+    // MARK: - Session Upload
+
+    /// Upload session trials to backend asynchronously (non-blocking)
+    private func uploadSessionAsync() {
+        Task {
+            do {
+                // Query all trials for this session from persistent store
+                let childID = "placeholder-child-id"  // TODO: from auth/config
+                let storedTrials = try await trialStore.getTrialsForSession(
+                    childID: childID,
+                    sessionID: sessionID
+                )
+
+                // Convert to TrialEventRecord format for upload
+                let trialRecords = storedTrials.map { storedTrial -> TrialEventRecord in
+                    // Parse timestamp if available
+                    let createdDate = ISO8601DateFormatter().date(from: storedTrial.clientTs) ?? Date()
+
+                    return TrialEventRecord(
+                        eventID: storedTrial.eventID,
+                        sessionID: storedTrial.sessionID,
+                        childID: storedTrial.childID,
+                        trialID: storedTrial.trialID ?? UUID().uuidString,
+                        ordinal: 0,  // Not stored in TrialStore record
+                        targetID: storedTrial.targetID ?? "unknown",
+                        createdAt: createdDate,
+                        tier1Signals: nil  // Will be added in future release
+                    )
+                }
+
+                // Upload to backend
+                let result = await trialService.uploadSession(
+                    childID: childID,
+                    sessionID: sessionID,
+                    trials: trialRecords
+                )
+
+                if result.success {
+                    print("✅ Session \(sessionID) uploaded successfully")
+                    print("   Uploaded: \(result.uploadedCount), Failed: \(result.failedCount)")
+                } else {
+                    print("⚠️ Session upload failed: \(result.message)")
+                }
+            } catch {
+                print("⚠️ Error uploading session: \(error)")
+            }
+        }
     }
 
     /// Record a trial attempt (called by PlaySurfaceView)
