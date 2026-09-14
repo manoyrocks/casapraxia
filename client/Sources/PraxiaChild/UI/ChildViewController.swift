@@ -262,10 +262,11 @@ struct PlaySurfaceView: View {
     let audioManager: AudioCaptureManager
     let onTrialEnd: () -> Void
 
-    @State private var currentTarget: TrialEngine.TargetState?
     @State private var isRecording = false
     @State private var showReinforcement = false
-    @State private var reinforcementLatency: TimeInterval = 0
+    @State private var waveformData: [Float] = []
+    @State private var showParentScoring = false
+    @State private var tier1Signal: Tier1Signal?
 
     var body: some View {
         VStack {
@@ -291,13 +292,25 @@ struct PlaySurfaceView: View {
 
             Spacer()
 
-            // Large, easy target to tap (actually a recording trigger)
+            // Waveform visualization (shows child they're being heard)
+            if isRecording {
+                WaveformView(data: waveformData)
+                    .frame(height: 60)
+                    .padding()
+                    .transition(.opacity)
+
+                Text("I'm listening...")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+
+            // Large, easy target to tap (≥64pt, accessible)
             Button(action: { startAttempt() }) {
                 VStack(spacing: 8) {
-                    Image(systemName: "mic.circle.fill")
+                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
                         .font(.system(size: 64))
-                        .foregroundColor(.blue)
-                    Text("Try it!")
+                        .foregroundColor(isRecording ? .red : .blue)
+                    Text(isRecording ? "Stop" : "Try it!")
                         .font(.headline)
                 }
                 .frame(maxWidth: .infinity)
@@ -305,12 +318,13 @@ struct PlaySurfaceView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(16)
             }
+            .disabled(showReinforcement || showParentScoring)
             .padding()
 
             // Reinforcement: contingency (child's action caused something)
             if showReinforcement {
                 VStack(spacing: 12) {
-                    LottieView()  // Simple animation of the target object moving
+                    LottieView()
                     Text("Look what happened!")
                         .font(.headline)
                 }
@@ -318,20 +332,44 @@ struct PlaySurfaceView: View {
                 .transition(.scale)
             }
 
+            // Parent scoring overlay (≥64pt buttons, positioned bottom-right)
+            if showParentScoring {
+                ParentScoringOverlay(
+                    onScore: handleParentScore,
+                    onDismiss: { showParentScoring = false }
+                )
+                .transition(.slide)
+            }
+
             Spacer()
         }
     }
 
     private func startAttempt() {
-        isRecording = true
-
-        // Load the current target from session
-        // (In real app, this would come from the clinician's target selection)
-        audioManager.beginAttempt(targetID: "ba", cueLevel: 0)
-
-        // After 3 seconds or on speech offset, end the attempt
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+        if isRecording {
             endAttempt()
+        } else {
+            isRecording = true
+            waveformData = []
+
+            audioManager.beginAttempt(targetID: "ba", cueLevel: 0)
+
+            // Start Tier-1 signal capture
+            Task {
+                try? await audioManager.startSession { signal in
+                    DispatchQueue.main.async {
+                        self.tier1Signal = signal
+                        self.waveformData = signal.intensityEnvelope.prefix(60).map { $0 / 100.0 }
+                    }
+                }
+            }
+
+            // Auto-end after 5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                if isRecording {
+                    endAttempt()
+                }
+            }
         }
     }
 
@@ -339,28 +377,164 @@ struct PlaySurfaceView: View {
         isRecording = false
 
         if let attempt = audioManager.endAttempt() {
-            // Record trial (no machine verdict on accuracy)
-            Task {
-                let result = await trialEngine.recordTrial(
-                    targetID: "ba",
-                    score: .correct,  // Parent must score, or silence
-                    attemptDuration: attempt.duration,
-                    snrDb: 15.0
-                )
+            // Show reinforcement immediately (≤150 ms)
+            withAnimation {
+                showReinforcement = true
+            }
 
-                // Show reinforcement (≤150 ms)
+            // Show parent scoring after reinforcement animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 withAnimation {
-                    showReinforcement = true
-                    reinforcementLatency = 0.050  // ~50 ms latency
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    withAnimation {
-                        showReinforcement = false
-                    }
-                    onTrialEnd()
+                    showParentScoring = true
                 }
             }
+        }
+    }
+
+    private func handleParentScore(_ score: TrialEngine.Score) {
+        showParentScoring = false
+
+        // Record trial with parent's score
+        Task {
+            _ = await trialEngine.recordTrial(
+                targetID: "ba",
+                score: score,
+                parentScore: score,
+                attemptDuration: audioManager.endAttempt()?.duration ?? 0,
+                snrDb: tier1Signal?.snrDb ?? 0
+            )
+
+            // End reinforcement and trial
+            withAnimation {
+                showReinforcement = false
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                onTrialEnd()
+            }
+        }
+    }
+}
+
+// MARK: - Waveform visualization
+
+struct WaveformView: View {
+    let data: [Float]
+
+    var body: some View {
+        Canvas { context, size in
+            let step = size.width / CGFloat(max(data.count, 1))
+            let midHeight = size.height / 2
+
+            for (index, value) in data.enumerated() {
+                let x = CGFloat(index) * step
+                let height = value * midHeight
+
+                let rect = CGRect(
+                    x: x,
+                    y: midHeight - height / 2,
+                    width: step * 0.8,
+                    height: height
+                )
+
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: 2),
+                    with: .color(.blue.opacity(0.6))
+                )
+            }
+        }
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - Parent scoring overlay
+
+struct ParentScoringOverlay: View {
+    let onScore: (TrialEngine.Score) -> Void
+    let onDismiss: () -> Void
+
+    @State private var dismissTimer: Timer?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("How was that?")
+                .font(.headline)
+                .padding(.bottom, 8)
+
+            // Got it (✓)
+            Button(action: {
+                onScore(.correct)
+                onDismiss()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 40))
+                    Text("Got it")
+                        .font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 80)
+                .background(Color.green.opacity(0.2))
+                .foregroundColor(.green)
+                .cornerRadius(12)
+            }
+
+            // Close/approximation (~)
+            Button(action: {
+                onScore(.close)
+                onDismiss()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 40))
+                    Text("Close")
+                        .font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 80)
+                .background(Color.orange.opacity(0.2))
+                .foregroundColor(.orange)
+                .cornerRadius(12)
+            }
+
+            // Try again (no red, warm phrasing)
+            Button(action: {
+                onScore(.notYet)
+                onDismiss()
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 40))
+                    Text("Try again")
+                        .font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 80)
+                .background(Color.gray.opacity(0.2))
+                .foregroundColor(.gray)
+                .cornerRadius(12)
+            }
+
+            Text("(Auto-closes in 5s)")
+                .font(.caption2)
+                .foregroundColor(.gray)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: 200)
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+        .shadow(radius: 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .padding(16)
+        .onAppear {
+            dismissTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                onDismiss()
+            }
+        }
+        .onDisappear {
+            dismissTimer?.invalidate()
         }
     }
 }

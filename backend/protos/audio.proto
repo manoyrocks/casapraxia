@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package praxia.audio.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/praxia-ai/backend/pkg/gen/audio/v1";
+
+// AudioService manages audio uploads and retrieval
+service AudioService {
+  rpc UploadAudio(UploadAudioRequest) returns (UploadAudioResponse);
+  rpc GetAudioStatus(GetAudioStatusRequest) returns (GetAudioStatusResponse);
+  rpc GetAudioMetadata(GetAudioMetadataRequest) returns (GetAudioMetadataResponse);
+}
+
+// UploadAudioRequest
+message UploadAudioRequest {
+  string trial_id = 1;
+  string session_id = 2;
+  string child_id = 3;
+  bytes audio_blob = 4; // Opus encoded
+  float duration_seconds = 5;
+  int32 sample_rate = 6;
+  int32 channels = 7;
+  int32 bit_depth = 8;
+  string content_type = 9; // e.g., "audio/opus"
+}
+
+message UploadAudioResponse {
+  string trial_id = 1;
+  string s3_path = 2;
+  google.protobuf.Timestamp uploaded_at = 3;
+  string message = 4;
+}
+
+// GetAudioStatusRequest
+message GetAudioStatusRequest {
+  string trial_id = 1;
+}
+
+enum AudioStatus {
+  AUDIO_STATUS_UNSPECIFIED = 0;
+  AVAILABLE = 1;
+  EXPIRED = 2;
+  DELETED = 3;
+  NOT_FOUND = 4;
+}
+
+message GetAudioStatusResponse {
+  AudioStatus status = 1;
+  string s3_path = 2;
+  google.protobuf.Timestamp retention_expires = 3;
+}
+
+// GetAudioMetadataRequest
+message GetAudioMetadataRequest {
+  string trial_id = 1;
+}
+
+message AudioMetadata {
+  string trial_id = 1;
+  string s3_path = 2;
+  float duration_seconds = 3;
+  int32 sample_rate = 4;
+  int32 channels = 5;
+  int32 bit_depth = 6;
+  google.protobuf.Timestamp uploaded_at = 7;
+  google.protobuf.Timestamp retention_expires = 8;
+  AudioStatus status = 9;
+}
+
+message GetAudioMetadataResponse {
+  AudioMetadata metadata = 1;
+}

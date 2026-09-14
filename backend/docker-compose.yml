@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: praxia-postgres
+    environment:
+      POSTGRES_DB: praxia
+      POSTGRES_USER: praxia_user
+      POSTGRES_PASSWORD: praxia_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U praxia_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: praxia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NATS Event Stream
+  nats:
+    image: nats:2.10-alpine
+    container_name: praxia-nats
+    ports:
+      - "4222:4222"
+      - "6222:6222"
+      - "8222:8222"
+    command: |
+      -c /etc/nats/nats.conf
+    volumes:
+      - ./config/nats.conf:/etc/nats/nats.conf
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--output-document=-", "http://localhost:8222/connz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO (S3-compatible object storage for local development)
+  minio:
+    image: minio/minio:latest
+    container_name: praxia-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Praxia Backend Server
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+    container_name: praxia-backend
+    environment:
+      DATABASE_URL: "postgres://praxia_user:praxia_password@postgres:5432/praxia?sslmode=disable"
+      NATS_URL: "nats://nats:4222"
+      REDIS_URL: "redis://redis:6379"
+      S3_BUCKET: "praxia-audio"
+      S3_REGION: "us-east-1"
+      S3_ENDPOINT: "http://minio:9000"
+      GRPC_PORT: "50051"
+      LOG_LEVEL: "debug"
+      ENVIRONMENT: "dev"
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/app/migrations
+      - ./internal:/app/internal
+      - ./cmd:/app/cmd
+      - ./pkg:/app/pkg
+    command: go run ./cmd/server
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  minio_data:
+
+networks:
+  default:
+    name: praxia-network

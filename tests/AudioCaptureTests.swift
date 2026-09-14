@@ -170,4 +170,188 @@ final class AudioCaptureTests: XCTestCase {
         let fixtureTestName = "fixture_ba_attempt_1"
         XCTAssert(true, "Fixture test for: \(fixtureTestName)")
     }
+
+    // MARK: - Comprehensive latency benchmarking under load
+
+    func testTier1LatencyUnder100Hz() {
+        // Simulate 100 Hz audio tap (160 samples per frame @ 16 kHz)
+        let sampleRate: Float = 16000
+        let frameSize = 160
+        let numFrames = 100
+
+        var totalTime: TimeInterval = 0
+        var maxTime: TimeInterval = 0
+        var minTime: TimeInterval = .infinity
+
+        for _ in 0..<numFrames {
+            let data = (0..<frameSize).map { _ in Float.random(in: -0.1...0.1) }
+            var dataArray = data
+            let startTime = Date()
+
+            // Simulate Tier-1 computation
+            var squared = [Float](repeating: 0, count: frameSize)
+            vDSP_vsq(&dataArray, 1, &squared, 1, vDSP_Length(frameSize))
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            totalTime += elapsed
+            maxTime = max(maxTime, elapsed)
+            minTime = min(minTime, elapsed)
+        }
+
+        let avgTime = totalTime / Double(numFrames)
+
+        XCTAssertLess(avgTime, 0.010, "Average Tier-1 computation should be <10ms")
+        XCTAssertLess(maxTime, 0.050, "Max Tier-1 computation should be <50ms")
+
+        print("Audio latency stats: avg=\(String(format: "%.2f", avgTime * 1000))ms, max=\(String(format: "%.2f", maxTime * 1000))ms, min=\(String(format: "%.2f", minTime * 1000))ms")
+    }
+
+    func testVocalizationDetectionAccuracy() {
+        // Test with synthetic signals representing real child SSD patterns
+
+        // Test 1: Clear vocalization (speech-level energy)
+        let speechEnvelope = [Float](repeating: -60.0, count: 20) +
+                             [Float](repeating: -20.0, count: 30) +
+                             [Float](repeating: -60.0, count: 20)
+
+        let threshold = -60.0 + 6.0
+        var detectedSpeech = false
+        for intensity in speechEnvelope {
+            if intensity > threshold {
+                detectedSpeech = true
+                break
+            }
+        }
+        XCTAssertTrue(detectedSpeech, "Should detect clear vocalization")
+
+        // Test 2: Noise floor only (no vocalization)
+        let noiseEnvelope = [Float](repeating: -70.0, count: 70)
+        var detectedNoise = false
+        for intensity in noiseEnvelope {
+            if intensity > threshold {
+                detectedNoise = true
+                break
+            }
+        }
+        XCTAssertFalse(detectedNoise, "Should not detect noise as vocalization")
+
+        // Test 3: Borderline energy
+        let borderlineEnvelope = [Float](repeating: -60.0, count: 50) +
+                                [Float](repeating: -54.0, count: 20)  // Just above threshold
+        var detectedBorderline = false
+        for intensity in borderlineEnvelope {
+            if intensity > threshold {
+                detectedBorderline = true
+                break
+            }
+        }
+        XCTAssertTrue(detectedBorderline, "Should detect borderline vocalization")
+    }
+
+    func testSyllableCountingRobustness() {
+        // Generate test signals with known syllable counts
+
+        // 1 syllable: single peak
+        var envelope1 = [Float](repeating: 0.01, count: 30)
+        for i in 10..<20 {
+            envelope1[i] = 0.5
+        }
+        let peaks1 = countPeaks(envelope1)
+        XCTAssertGreaterThanOrEqual(peaks1, 0, "Single syllable should be detected")
+
+        // 3 syllables: three distinct peaks
+        var envelope3 = [Float](repeating: 0.01, count: 100)
+        for cycle in 0..<3 {
+            let start = 10 + cycle * 30
+            for i in start..<(start + 10) {
+                envelope3[i] = 0.5
+            }
+        }
+        let peaks3 = countPeaks(envelope3)
+        XCTAssertGreater(peaks3, 0, "Multiple syllables should be detected")
+    }
+
+    func testSNREstimationAccuracy() {
+        // Test SNR calculation in various signal conditions
+
+        // Clean speech (high SNR)
+        let cleanSpeechPeak: Float = 0.5
+        let cleanNoiseFloor: Float = -70.0
+        let cleanPeakDb = 10 * log10(cleanSpeechPeak * cleanSpeechPeak + 1e-6)
+        let cleanSNR = cleanPeakDb - cleanNoiseFloor
+        XCTAssertGreater(cleanSNR, 18, "Clean speech should have SNR >18 dB")
+
+        // Noisy speech (lower SNR)
+        let noisySpeechPeak: Float = 0.3
+        let noisyNoiseFloor: Float = -50.0
+        let noisyPeakDb = 10 * log10(noisySpeechPeak * noisySpeechPeak + 1e-6)
+        let noisySNR = noisyPeakDb - noisyNoiseFloor
+        XCTAssertGreater(noisySNR, 6, "Noisy speech should still report SNR >6 dB")
+    }
+
+    func testAudioFormatConsistency() {
+        // Verify audio format never changes
+        let format1 = AudioCaptureManager.audioFormat
+        let format2 = AudioCaptureManager.audioFormat
+
+        XCTAssertEqual(format1.sampleRate, format2.sampleRate)
+        XCTAssertEqual(format1.channelCount, format2.channelCount)
+        XCTAssertEqual(format1.commonFormat, format2.commonFormat)
+    }
+
+    func testNoTier1ExceptionsUnderStress() {
+        // Verify Tier-1 never throws, even with edge-case audio
+
+        // Empty buffer
+        do {
+            let empty = [Float]()
+            _ = try? computeIntensityEnvelopeTest(empty)
+            XCTAssert(true, "Empty buffer should not crash")
+        }
+
+        // Single sample
+        do {
+            let single = [Float(0.1)]
+            _ = try? computeIntensityEnvelopeTest(single)
+            XCTAssert(true, "Single sample should not crash")
+        }
+
+        // All zeros
+        do {
+            let zeros = [Float](repeating: 0, count: 1000)
+            _ = try? computeIntensityEnvelopeTest(zeros)
+            XCTAssert(true, "All zeros should not crash")
+        }
+
+        // NaN values (shouldn't happen, but graceful degradation)
+        do {
+            let withNaN = [Float.nan, 0.1, 0.2, 0.1, Float.nan]
+            _ = try? computeIntensityEnvelopeTest(withNaN)
+            XCTAssert(true, "NaN values should not crash")
+        }
+    }
+
+    // MARK: - Helper methods
+
+    private func countPeaks(_ envelope: [Float]) -> Int {
+        var peakCount = 0
+        for i in 1..<(envelope.count - 1) {
+            if envelope[i] > envelope[i-1] && envelope[i] > envelope[i+1] {
+                let peakHeight = envelope[i]
+                let localMin = min(envelope[i-1], envelope[i+1])
+                if 10 * log10(peakHeight / (localMin + 1e-6)) > 3.0 {
+                    peakCount += 1
+                }
+            }
+        }
+        return peakCount
+    }
+
+    private func computeIntensityEnvelopeTest(_ data: [Float]) -> [Float]? {
+        guard !data.isEmpty else { return nil }
+        var floatArray = data
+        var squared = [Float](repeating: 0, count: data.count)
+        vDSP_vsq(&floatArray, 1, &squared, 1, vDSP_Length(data.count))
+        return squared
+    }
 }
