@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Praxia — Speech Practice for Children</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    :root {
+      --color-bg-primary: #ffffff;
+      --color-bg-secondary: #f8f9fa;
+      --color-bg-tertiary: #f0f2f5;
+      --color-text-primary: #1a1a1a;
+      --color-text-secondary: #666666;
+      --color-text-tertiary: #999999;
+      --color-border: #e8eaed;
+      --color-accent: #5b9ef5;
+      --color-accent-light: #e3f2fd;
+      --color-success: #81c784;
+      --color-success-light: #e8f5e9;
+      --color-warm: #ffb74d;
+      --color-warning: #ffa726;
+      --color-red: #ef5350;
+
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+
+      --type-display: 2.5rem;
+      --type-heading-xl: 2rem;
+      --type-heading-lg: 1.5rem;
+      --type-heading-md: 1.25rem;
+      --type-heading-sm: 1rem;
+      --type-body: 1rem;
+      --type-caption: 0.875rem;
+      --type-label: 0.75rem;
+
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.12);
+
+      --transition-fast: 150ms ease-in-out;
+      --transition-base: 250ms ease-in-out;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --color-bg-primary: #121212;
+        --color-bg-secondary: #1e1e1e;
+        --color-bg-tertiary: #2a2a2a;
+        --color-text-primary: #ffffff;
+        --color-text-secondary: #b3b3b3;
+        --color-text-tertiary: #808080;
+        --color-border: #333333;
+        --color-accent-light: #1a3a52;
+        --color-success-light: #1b4620;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --color-bg-primary: #121212;
+      --color-bg-secondary: #1e1e1e;
+      --color-bg-tertiary: #2a2a2a;
+      --color-text-primary: #ffffff;
+      --color-text-secondary: #b3b3b3;
+      --color-text-tertiary: #808080;
+      --color-border: #333333;
+      --color-accent-light: #1a3a52;
+      --color-success-light: #1b4620;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      line-height: 1.6;
+      transition: background var(--transition-base), color var(--transition-base);
+      padding: var(--space-md);
+    }
+
+    .app-container {
+      max-width: 1600px;
+      margin: 0 auto;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--space-md) 0;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: var(--space-lg);
+      gap: var(--space-lg);
+    }
+
+    .header-brand {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-md);
+      font-weight: 700;
+      color: var(--color-accent);
+    }
+
+    .header-controls {
+      display: flex;
+      gap: var(--space-md);
+      align-items: center;
+    }
+
+    .theme-toggle {
+      display: flex;
+      gap: var(--space-sm);
+    }
+
+    .toggle-btn {
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: var(--type-caption);
+      font-weight: 500;
+      transition: all var(--transition-fast);
+    }
+
+    .toggle-btn.active {
+      background: var(--color-accent);
+      color: white;
+      border-color: var(--color-accent);
+    }
+
+    .main-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: var(--space-lg);
+      overflow: hidden;
+    }
+
+    .child-zone {
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      overflow-y: auto;
+    }
+
+    .surface-tabs {
+      display: flex;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+      border-bottom: 2px solid var(--color-border);
+      padding-bottom: var(--space-md);
+      overflow-x: auto;
+    }
+
+    .surface-tab {
+      padding: var(--space-md) var(--space-lg);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      font-weight: 600;
+      transition: all var(--transition-fast);
+      font-size: var(--type-caption);
+      white-space: nowrap;
+    }
+
+    .surface-tab.active {
+      color: var(--color-accent);
+      border-bottom-color: var(--color-accent);
+    }
+
+    .surface-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .surface-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .session-header {
+      margin-bottom: var(--space-lg);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .session-info {
+      display: flex;
+      gap: var(--space-lg);
+      align-items: center;
+    }
+
+    .timer {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-sm);
+      font-weight: 700;
+      color: var(--color-accent);
+    }
+
+    .trial-counter {
+      font-size: var(--type-caption);
+      color: var(--color-text-secondary);
+    }
+
+    .progress-bar {
+      width: 200px;
+      height: 6px;
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--color-success);
+      width: 35%;
+      transition: width var(--transition-base);
+    }
+
+    .practice-surface {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xl);
+      flex: 1;
+    }
+
+    .companion-display {
+      width: 140px;
+      height: 140px;
+      background: linear-gradient(135deg, var(--color-accent-light), var(--color-success-light));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+      animation: float 3s ease-in-out infinite;
+      box-shadow: var(--shadow-lg);
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    .model-video {
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 4/3;
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: var(--space-lg) 0;
+      font-size: 2rem;
+      border: 2px dashed var(--color-border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .model-video.playing {
+      border-color: var(--color-accent);
+    }
+
+    .video-play-indicator {
+      position: absolute;
+      top: var(--space-md);
+      right: var(--space-md);
+      background: var(--color-accent);
+      color: white;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-md);
+      font-size: var(--type-caption);
+      font-weight: 600;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .trial-prompt {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-md);
+      color: var(--color-text-primary);
+      margin: var(--space-lg) 0;
+    }
+
+    .attempt-window {
+      width: 100%;
+      max-width: 500px;
+      padding: var(--space-xl);
+      background: var(--color-success-light);
+      border: 3px solid var(--color-success);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-lg);
+    }
+
+    .attempt-icon {
+      font-size: 3rem;
+      animation: bounce 1s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .attempt-text {
+      font-size: var(--type-body);
+      color: var(--color-text-secondary);
+    }
+
+    .waveform-display {
+      width: 100%;
+      height: 60px;
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .waveform-bar {
+      width: 4px;
+      background: var(--color-accent);
+      border-radius: 2px;
+      animation: wave 0.6s ease-in-out infinite;
+    }
+
+    @keyframes wave {
+      0%, 100% { height: 10%; }
+      50% { height: 100%; }
+    }
+
+    .trial-controls {
+      display: flex;
+      gap: var(--space-md);
+      justify-content: center;
+      flex-wrap: wrap;
+      width: 100%;
+      margin-top: var(--space-lg);
+    }
+
+    .score-btn {
+      padding: var(--space-md) var(--space-xl);
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: var(--type-body);
+      transition: all var(--transition-fast);
+      min-height: 64px;
+      min-width: 120px;
+      touch-action: manipulation;
+    }
+
+    .score-btn:hover {
+      border-color: var(--color-accent);
+      background: var(--color-accent-light);
+    }
+
+    .aac-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: var(--space-md);
+      padding: var(--space-md);
+    }
+
+    .aac-cell {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--color-accent-light), var(--color-bg-tertiary));
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      touch-action: manipulation;
+      padding: var(--space-sm);
+      text-align: center;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      min-height: 90px;
+    }
+
+    .aac-cell:hover {
+      border-color: var(--color-accent);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .aac-cell.speaking {
+      border-color: var(--color-success);
+      background: var(--color-success-light);
+      animation: pulse 0.5s;
+    }
+
+    .aac-icon {
+      font-size: 2.5rem;
+      margin-bottom: var(--space-xs);
+    }
+
+    .aac-label {
+      font-size: var(--type-label);
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+
+    .history-item {
+      padding: var(--space-md);
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-md);
+      border-left: 4px solid var(--color-accent);
+    }
+
+    .history-date {
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .history-stats {
+      display: flex;
+      gap: var(--space-lg);
+      font-size: var(--type-caption);
+      color: var(--color-text-secondary);
+    }
+
+    .parent-panel {
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      border: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-lg);
+      overflow-y: auto;
+    }
+
+    .panel-title {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-sm);
+      color: var(--color-text-primary);
+      font-weight: 700;
+    }
+
+    .coaching-box {
+      background: var(--color-accent-light);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      border-left: 4px solid var(--color-accent);
+    }
+
+    .coaching-text {
+      font-size: var(--type-caption);
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-md);
+    }
+
+    .stat-card {
+      background: var(--color-bg-tertiary);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+
+    .stat-number {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-lg);
+      font-weight: 700;
+      color: var(--color-accent);
+    }
+
+    .stat-label {
+      font-size: var(--type-caption);
+      color: var(--color-text-secondary);
+      margin-top: var(--space-xs);
+    }
+
+    .cue-level-badge {
+      display: inline-block;
+      background: var(--color-success);
+      color: white;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-md);
+      font-weight: 700;
+      font-size: var(--type-caption);
+      margin: var(--space-sm) 0;
+    }
+
+    .cue-hierarchy {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: var(--space-xs);
+      margin: var(--space-md) 0;
+    }
+
+    .cue-box {
+      text-align: center;
+      padding: var(--space-sm);
+      border-radius: var(--radius-md);
+      border: 2px solid var(--color-border);
+      background: var(--color-bg-tertiary);
+      font-size: var(--type-label);
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      transition: all var(--transition-fast);
+    }
+
+    .cue-box.active {
+      border-color: var(--color-success);
+      background: var(--color-success-light);
+      color: var(--color-success);
+    }
+
+    .tier1-signals {
+      background: var(--color-bg-tertiary);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      font-size: var(--type-caption);
+    }
+
+    .signal-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: var(--space-xs);
+      color: var(--color-text-secondary);
+    }
+
+    .signal-value {
+      font-weight: 600;
+      color: var(--color-accent);
+    }
+
+    .settings-btn, .btn-primary {
+      padding: var(--space-md) var(--space-lg);
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-weight: 600;
+      transition: all var(--transition-fast);
+      min-height: 64px;
+      width: 100%;
+    }
+
+    .settings-btn:hover, .btn-primary:hover {
+      background: #4a8ae5;
+      box-shadow: var(--shadow-md);
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--color-bg-primary);
+      border-radius: var(--radius-lg);
+      padding: var(--space-2xl);
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+
+    .modal-header {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-lg);
+      font-weight: 700;
+      margin-bottom: var(--space-lg);
+    }
+
+    .modal-close {
+      position: absolute;
+      top: var(--space-lg);
+      right: var(--space-lg);
+      background: none;
+      border: none;
+      font-size: var(--type-heading-md);
+      cursor: pointer;
+      color: var(--color-text-secondary);
+    }
+
+    .celebration-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .celebration-modal.active {
+      display: flex;
+    }
+
+    .celebration-content {
+      text-align: center;
+      color: white;
+      animation: zoomIn 0.6s ease-out;
+    }
+
+    @keyframes zoomIn {
+      from {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .celebration-emoji {
+      font-size: 6rem;
+      margin-bottom: var(--space-lg);
+      animation: bounce 1s ease-in-out infinite;
+    }
+
+    .celebration-text {
+      font-family: 'Poppins', sans-serif;
+      font-size: var(--type-heading-xl);
+      font-weight: 700;
+      margin-bottom: var(--space-lg);
+    }
+
+    .collection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: var(--space-md);
+      padding: var(--space-md);
+    }
+
+    .collection-item {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--color-warm), var(--color-accent-light));
+      border-radius: var(--radius-lg);
+      font-size: 3rem;
+      cursor: pointer;
+      transition: transform var(--transition-fast);
+      box-shadow: var(--shadow-md);
+    }
+
+    .collection-item:hover {
+      transform: scale(1.08) rotate(2deg);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 200px;
+      margin: var(--space-md) 0;
+    }
+
+    .chart-container canvas {
+      max-height: 200px;
+    }
+
+    @media (max-width: 1200px) {
+      .main-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .parent-panel {
+        max-height: 250px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: var(--space-sm);
+      }
+
+      .header {
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+
+      .main-layout {
+        height: auto;
+      }
+
+      .child-zone {
+        padding: var(--space-md);
+      }
+
+      .companion-display {
+        width: 100px;
+        height: 100px;
+        font-size: 2.5rem;
+      }
+
+      .modal-content {
+        width: 90%;
+        padding: var(--space-lg);
+      }
+    }
+
+    .btn:focus-visible,
+    .score-btn:focus-visible,
+    .aac-cell:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div class="header">
+      <div class="header-brand">🎤 Praxia</div>
+      <div class="header-controls">
+        <div class="theme-toggle">
+          <button class="toggle-btn active" onclick="setTheme('system')">System</button>
+          <button class="toggle-btn" onclick="setTheme('light')">☀️</button>
+          <button class="toggle-btn" onclick="setTheme('dark')">🌙</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-layout">
+      <div class="child-zone">
+        <div class="surface-tabs">
+          <button class="surface-tab active" onclick="switchSurface('play')">🎮 Play</button>
+          <button class="surface-tab" onclick="switchSurface('talk')">💬 Talk</button>
+          <button class="surface-tab" onclick="switchSurface('collection')">⭐ Collection</button>
+          <button class="surface-tab" onclick="switchSurface('history')">📊 History</button>
+        </div>
+
+        <!-- Play Surface -->
+        <div id="play" class="surface-content active">
+          <div class="session-header">
+            <div class="session-info">
+              <div class="timer" id="timer">10:00</div>
+              <div class="trial-counter"><span id="trial-count">27</span>/80 attempts</div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="practice-surface">
+            <div class="companion-display" id="companion">👧</div>
+
+            <div class="model-video" id="modelVideo">
+              <div>🎬</div>
+              <div class="video-play-indicator">Playing</div>
+            </div>
+
+            <div class="trial-prompt" id="prompt">Say: "ball"</div>
+
+            <div class="attempt-window">
+              <div class="attempt-icon">🎤</div>
+              <div class="attempt-text">Your turn! Say the word</div>
+              <div class="waveform-display">
+                <div class="waveform-bar" style="animation-delay: 0s;"></div>
+                <div class="waveform-bar" style="animation-delay: 0.1s;"></div>
+                <div class="waveform-bar" style="animation-delay: 0.2s;"></div>
+                <div class="waveform-bar" style="animation-delay: 0.3s;"></div>
+                <div class="waveform-bar" style="animation-delay: 0.4s;"></div>
+              </div>
+            </div>
+
+            <div class="trial-controls">
+              <button class="score-btn" onclick="scoreAttempt('got_it', '✓ Got it!')">✓ Got it!</button>
+              <button class="score-btn" onclick="scoreAttempt('close', '~ Close')">~ Close</button>
+              <button class="score-btn" onclick="scoreAttempt('not_yet', '⏸ Not yet')">⏸ Not yet</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Talk Surface (AAC) -->
+        <div id="talk" class="surface-content">
+          <div class="session-header">
+            <div class="panel-title">💬 Say it or tap AAC</div>
+          </div>
+
+          <div class="aac-board">
+            <div class="aac-cell" onclick="speakWord(this, 'apple')">
+              <div class="aac-icon">🍎</div>
+              <div class="aac-label">apple</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'car')">
+              <div class="aac-icon">🚗</div>
+              <div class="aac-label">car</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'dog')">
+              <div class="aac-icon">🐶</div>
+              <div class="aac-label">dog</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'song')">
+              <div class="aac-icon">🎵</div>
+              <div class="aac-label">song</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'hug')">
+              <div class="aac-icon">🤗</div>
+              <div class="aac-label">hug</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'pizza')">
+              <div class="aac-icon">🍕</div>
+              <div class="aac-label">pizza</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'star')">
+              <div class="aac-icon">⭐</div>
+              <div class="aac-label">star</div>
+            </div>
+            <div class="aac-cell" onclick="speakWord(this, 'bye')">
+              <div class="aac-icon">👋</div>
+              <div class="aac-label">bye</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Collection Surface -->
+        <div id="collection" class="surface-content">
+          <div class="session-header">
+            <div class="panel-title">⭐ Your collection grows as you practice</div>
+          </div>
+
+          <div class="collection-grid">
+            <div class="collection-item">🌟</div>
+            <div class="collection-item">🎨</div>
+            <div class="collection-item">🦋</div>
+            <div class="collection-item">🎭</div>
+            <div class="collection-item">🌈</div>
+            <div class="collection-item">🎪</div>
+          </div>
+        </div>
+
+        <!-- History Surface -->
+        <div id="history" class="surface-content">
+          <div class="session-header">
+            <div class="panel-title">📊 Your Practice History</div>
+          </div>
+
+          <div class="history-list" id="history-list">
+            <div class="history-item">
+              <div class="history-date">Today • 2:45 PM</div>
+              <div class="history-stats">
+                <span>27 attempts</span>
+                <span>78% approx.</span>
+                <span>L2 cue level</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-date">Yesterday • 3:00 PM</div>
+              <div class="history-stats">
+                <span>32 attempts</span>
+                <span>71% approx.</span>
+                <span>L2 cue level</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-date">2 days ago • 2:30 PM</div>
+              <div class="history-stats">
+                <span>28 attempts</span>
+                <span>74% approx.</span>
+                <span>L3 cue level</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-date">3 days ago • 2:45 PM</div>
+              <div class="history-stats">
+                <span>30 attempts</span>
+                <span>68% approx.</span>
+                <span>L3 cue level</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-date">4 days ago • 3:00 PM</div>
+              <div class="history-stats">
+                <span>26 attempts</span>
+                <span>72% approx.</span>
+                <span>L3 cue level</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parent Panel -->
+      <div class="parent-panel">
+        <div class="panel-title">👨‍👩‍👧 Coach Strip</div>
+
+        <div class="coaching-box">
+          <div class="coaching-text" id="coaching-message">
+            ✓ <strong>Great session!</strong> Your child is focused and trying hard. Keep it pressure-free.
+          </div>
+        </div>
+
+        <div>
+          <div class="panel-title" style="font-size: var(--type-body); margin-bottom: var(--space-md);">Cue Level</div>
+          <div class="cue-level-badge" id="cue-level-display">L2 - Gestural Cue</div>
+          <div class="cue-hierarchy">
+            <div class="cue-box" id="cue-0">L0</div>
+            <div class="cue-box active" id="cue-1">L1</div>
+            <div class="cue-box" id="cue-2">L2</div>
+            <div class="cue-box" id="cue-3">L3</div>
+            <div class="cue-box" id="cue-4">L4</div>
+            <div class="cue-box" id="cue-5">L5</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel-title" style="font-size: var(--type-body); margin-bottom: var(--space-md);">This Session</div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-number" id="attempts">27</div>
+              <div class="stat-label">Attempts</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number" id="accuracy">78%</div>
+              <div class="stat-label">Approx.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tier1-signals">
+          <div style="font-weight: 600; margin-bottom: var(--space-sm); color: var(--color-text-primary);">Last Attempt (Tier-1)</div>
+          <div class="signal-item">
+            <span>🎤 Vocalization</span>
+            <span class="signal-value">Detected</span>
+          </div>
+          <div class="signal-item">
+            <span>⏱️ Latency</span>
+            <span class="signal-value">145ms</span>
+          </div>
+          <div class="signal-item">
+            <span>📊 SNR</span>
+            <span class="signal-value">22dB</span>
+          </div>
+          <div class="signal-item">
+            <span>🎵 Syllables</span>
+            <span class="signal-value">1–2</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel-title" style="font-size: var(--type-body); margin-bottom: var(--space-md);">This Week</div>
+          <div class="chart-container">
+            <canvas id="progressChart"></canvas>
+          </div>
+        </div>
+
+        <button class="settings-btn">⚙️ More Options</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Celebration Modal -->
+  <div id="celebrationModal" class="celebration-modal">
+    <div class="celebration-content">
+      <div class="celebration-emoji">🎉</div>
+      <div class="celebration-text">Awesome job!</div>
+      <div class="celebration-subtext">You practiced with focus and tried so many times</div>
+    </div>
+  </div>
+
+  <script>
+    const cueDescriptions = {
+      0: 'L0 - Minimal Cue',
+      1: 'L1 - Visual Cue',
+      2: 'L2 - Gestural Cue',
+      3: 'L3 - Rhythmic Cue',
+      4: 'L4 - Verbal Cue',
+      5: 'L5 - Tactile Cue'
+    };
+
+    const coachingMessages = [
+      "✓ <strong>Great session!</strong> Your child is focused and trying hard.",
+      "👏 <strong>Wonderful progress!</strong> Every attempt is valuable learning.",
+      "💪 <strong>Nice work today!</strong> Consistency builds skills over time.",
+      "🌟 <strong>Excellent practice!</strong> Your child showed real effort today."
+    ];
+
+    let state = {
+      attempts: 27,
+      accuracy: 78,
+      trialCount: 27,
+      sessionDuration: 600,
+      theme: 'system',
+      currentCueLevel: 1,
+      trials: []
+    };
+
+    function updateTimer() {
+      const timerEl = document.getElementById('timer');
+      const parts = timerEl.textContent.split(':');
+      let minutes = parseInt(parts[0]);
+      let seconds = parseInt(parts[1]);
+
+      seconds--;
+      if (seconds < 0) {
+        seconds = 59;
+        minutes--;
+      }
+
+      if (minutes === 0 && seconds === 0) {
+        showCelebration();
+      }
+
+      if (minutes < 0) {
+        timerEl.textContent = '0:00';
+      } else {
+        timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }
+    }
+
+    setInterval(updateTimer, 1000);
+
+    function switchSurface(surface) {
+      document.querySelectorAll('.surface-content').forEach(el => {
+        el.classList.remove('active');
+      });
+      document.getElementById(surface).classList.add('active');
+
+      document.querySelectorAll('.surface-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+    }
+
+    function scoreAttempt(score, label) {
+      state.trialCount++;
+      state.trials.push({
+        timestamp: new Date(),
+        score: score,
+        cueLevel: state.currentCueLevel
+      });
+
+      document.getElementById('trial-count').textContent = state.trialCount;
+
+      const progress = Math.min((state.trialCount / 80) * 100, 100);
+      document.getElementById('progress').style.width = progress + '%';
+
+      state.accuracy = Math.floor(Math.random() * 15 + 70);
+      document.getElementById('accuracy').textContent = state.accuracy + '%';
+
+      if (score === 'got_it' && state.currentCueLevel > 0) {
+        state.currentCueLevel = Math.max(0, state.currentCueLevel - 1);
+      } else if (score === 'not_yet' && state.currentCueLevel < 5) {
+        state.currentCueLevel = Math.min(5, state.currentCueLevel + 1);
+      }
+
+      updateCueLevel();
+
+      const companion = document.getElementById('companion');
+      companion.style.animation = 'none';
+      setTimeout(() => {
+        companion.style.animation = 'float 3s ease-in-out infinite';
+      }, 10);
+
+      const video = document.getElementById('modelVideo');
+      video.classList.add('playing');
+      setTimeout(() => {
+        video.classList.remove('playing');
+      }, 2000);
+
+      updateTier1Signals();
+      showRewardAnimation();
+      updateCoachingMessage();
+      updateProgressChart();
+    }
+
+    function updateCueLevel() {
+      document.getElementById('cue-level-display').textContent = cueDescriptions[state.currentCueLevel];
+
+      for (let i = 0; i < 6; i++) {
+        const cueBox = document.getElementById(`cue-${i}`);
+        if (i === state.currentCueLevel) {
+          cueBox.classList.add('active');
+        } else {
+          cueBox.classList.remove('active');
+        }
+      }
+    }
+
+    function updateCoachingMessage() {
+      const randomMessage = coachingMessages[Math.floor(Math.random() * coachingMessages.length)];
+      document.getElementById('coaching-message').innerHTML = randomMessage;
+    }
+
+    function updateTier1Signals() {
+      const latency = Math.floor(Math.random() * 150 + 100);
+      const snr = Math.floor(Math.random() * 10 + 16);
+      const syllables = Math.floor(Math.random() * 2 + 1);
+
+      document.querySelector('.signal-item:nth-child(2) .signal-value').textContent = latency + 'ms';
+      document.querySelector('.signal-item:nth-child(3) .signal-value').textContent = snr + 'dB';
+      document.querySelector('.signal-item:nth-child(4) .signal-value').textContent = syllables + (syllables > 1 ? '–2' : '');
+    }
+
+    function showRewardAnimation() {
+      const reward = document.createElement('div');
+      reward.textContent = '✨';
+      reward.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 3rem;
+        animation: slideIn 0.6s ease-out;
+        pointer-events: none;
+      `;
+      document.body.appendChild(reward);
+      setTimeout(() => reward.remove(), 600);
+    }
+
+    function speakWord(element, word) {
+      element.classList.add('speaking');
+      console.log(`Speaking: ${word}`);
+      setTimeout(() => {
+        element.classList.remove('speaking');
+      }, 500);
+    }
+
+    function setTheme(theme) {
+      if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+
+      document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      state.theme = theme;
+      localStorage.setItem('praxia-theme', theme);
+    }
+
+    function showCelebration() {
+      document.getElementById('celebrationModal').classList.add('active');
+      setTimeout(() => {
+        document.getElementById('celebrationModal').classList.remove('active');
+      }, 3000);
+    }
+
+    function updateProgressChart() {
+      const ctx = document.getElementById('progressChart');
+      if (!ctx) return;
+
+      if (window.progressChartInstance) {
+        window.progressChartInstance.destroy();
+      }
+
+      window.progressChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          datasets: [{
+            label: 'Attempts',
+            data: [65, 70, 68, 75, 78, 72, 74],
+            borderColor: '#5b9ef5',
+            backgroundColor: 'rgba(91, 158, 245, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#5b9ef5',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                color: '#666666',
+                font: { size: 12 }
+              },
+              grid: {
+                color: 'rgba(0, 0, 0, 0.05)'
+              }
+            },
+            x: {
+              ticks: {
+                color: '#666666',
+                font: { size: 12 }
+              },
+              grid: {
+                display: false
+              }
+            }
+          }
+        }
+      });
+    }
+
+    const savedTheme = localStorage.getItem('praxia-theme');
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+
+    updateCueLevel();
+    setTimeout(() => {
+      updateProgressChart();
+    }, 100);
+  </script>
+</body>
+</html>
