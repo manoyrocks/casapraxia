@@ -1,74 +1,103 @@
 syntax = "proto3";
 
-package praxia.audio.v1;
+package praxia.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/praxia-ai/backend/pkg/gen/audio/v1";
+option go_package = "github.com/praxia-ai/backend/pkg/gen/praxia/v1;praxiav1";
+option swift_prefix = "Praxia";
 
-// AudioService manages audio uploads and retrieval
+// AudioService manages audio upload presigning, verification, and status tracking
 service AudioService {
-  rpc UploadAudio(UploadAudioRequest) returns (UploadAudioResponse);
+  rpc PresignAudioUpload(PresignAudioUploadRequest) returns (PresignAudioUploadResponse);
+  rpc VerifyAudioUpload(VerifyAudioUploadRequest) returns (VerifyAudioUploadResponse);
   rpc GetAudioStatus(GetAudioStatusRequest) returns (GetAudioStatusResponse);
-  rpc GetAudioMetadata(GetAudioMetadataRequest) returns (GetAudioMetadataResponse);
+  rpc DeleteAudioAfterRetention(DeleteAudioAfterRetentionRequest) returns (DeleteAudioAfterRetentionResponse);
 }
 
-// UploadAudioRequest
-message UploadAudioRequest {
-  string trial_id = 1;
-  string session_id = 2;
-  string child_id = 3;
-  bytes audio_blob = 4; // Opus encoded
-  float duration_seconds = 5;
-  int32 sample_rate = 6;
-  int32 channels = 7;
-  int32 bit_depth = 8;
-  string content_type = 9; // e.g., "audio/opus"
-}
-
-message UploadAudioResponse {
-  string trial_id = 1;
-  string s3_path = 2;
-  google.protobuf.Timestamp uploaded_at = 3;
-  string message = 4;
-}
-
-// GetAudioStatusRequest
-message GetAudioStatusRequest {
-  string trial_id = 1;
-}
+// ============================================================================
+// ENUMS
+// ============================================================================
 
 enum AudioStatus {
   AUDIO_STATUS_UNSPECIFIED = 0;
-  AVAILABLE = 1;
-  EXPIRED = 2;
-  DELETED = 3;
-  NOT_FOUND = 4;
+  PENDING = 1;          // not yet uploaded
+  UPLOADED = 2;         // verified on S3
+  EXPIRED = 3;          // past retention period
+  DELETED = 4;          // deleted per retention policy
+}
+
+enum RetentionClass {
+  RETENTION_UNSPECIFIED = 0;
+  NONE = 1;             // discard immediately
+  ON_DEVICE_90D = 2;    // local storage, 90 days
+  CLOUD_90D = 3;        // S3, 90 days
+  KEEPSAKE_INDEFINITE = 4;  // indefinite, keepsake clip
+}
+
+// ============================================================================
+// PRESIGN AUDIO UPLOAD (Client initiates S3 upload)
+// ============================================================================
+
+message PresignAudioUploadRequest {
+  string child_id = 1;
+  string attempt_id = 2;
+  int64 content_length_bytes = 3;
+  string content_hash_sha256 = 4;         // hex-encoded SHA256
+}
+
+message PresignAudioUploadResponse {
+  string s3_url = 1;                      // pre-signed PUT URL
+  string method = 2;                      // "PUT"
+  int32 expiry_seconds = 3;               // 15 minutes typical
+  map<string, string> headers = 4;        // auth headers for presigned URL
+}
+
+// ============================================================================
+// VERIFY AUDIO UPLOAD (Server confirms S3 received file)
+// ============================================================================
+
+message VerifyAudioUploadRequest {
+  string child_id = 1;
+  string attempt_id = 2;
+  string content_hash_sha256 = 3;         // verify checksum
+}
+
+message VerifyAudioUploadResponse {
+  bool verified = 1;
+  string error_message = 2;
+  google.protobuf.Timestamp verified_at = 3;
+}
+
+// ============================================================================
+// GET AUDIO STATUS
+// ============================================================================
+
+message GetAudioStatusRequest {
+  string child_id = 1;
+  string attempt_id = 2;
 }
 
 message GetAudioStatusResponse {
-  AudioStatus status = 1;
-  string s3_path = 2;
-  google.protobuf.Timestamp retention_expires = 3;
+  string attempt_id = 1;
+  AudioStatus status = 2;
+  string s3_key = 3;
+  RetentionClass retention_class = 4;
+  google.protobuf.Timestamp retention_expires_at = 5;
+  google.protobuf.Timestamp uploaded_at = 6;
 }
 
-// GetAudioMetadataRequest
-message GetAudioMetadataRequest {
-  string trial_id = 1;
+// ============================================================================
+// DELETE AUDIO AFTER RETENTION (Compliance cleanup job)
+// ============================================================================
+
+message DeleteAudioAfterRetentionRequest {
+  string child_id = 1;
+  string attempt_id = 2;
 }
 
-message AudioMetadata {
-  string trial_id = 1;
-  string s3_path = 2;
-  float duration_seconds = 3;
-  int32 sample_rate = 4;
-  int32 channels = 5;
-  int32 bit_depth = 6;
-  google.protobuf.Timestamp uploaded_at = 7;
-  google.protobuf.Timestamp retention_expires = 8;
-  AudioStatus status = 9;
-}
-
-message GetAudioMetadataResponse {
-  AudioMetadata metadata = 1;
+message DeleteAudioAfterRetentionResponse {
+  bool deleted = 1;
+  string deletion_receipt = 2;            // audit log reference
+  google.protobuf.Timestamp deleted_at = 3;
 }

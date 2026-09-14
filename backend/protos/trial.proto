@@ -1,137 +1,206 @@
 syntax = "proto3";
 
-package praxia.trial.v1;
+package praxia.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/praxia-ai/backend/pkg/gen/trial/v1";
+option go_package = "github.com/praxia-ai/backend/pkg/gen/praxia/v1;praxiav1";
+option swift_prefix = "Praxia";
 
-// TrialService manages speech therapy trial data
+// TrialService manages speech therapy trial upload and retrieval
 service TrialService {
   rpc UploadSession(UploadSessionRequest) returns (UploadSessionResponse);
   rpc GetSessionTrials(GetSessionTrialsRequest) returns (GetSessionTrialsResponse);
   rpc GetChildProgress(GetChildProgressRequest) returns (GetChildProgressResponse);
-  rpc QueryTrials(QueryTrialsRequest) returns (QueryTrialsResponse);
+  rpc QueryTrials(QueryTrialsRequest) returns (stream TrialEvent);
 }
 
-// Score enum
+// ============================================================================
+// ENUMS
+// ============================================================================
+
 enum ScoreValue {
   SCORE_UNSPECIFIED = 0;
   GOT_IT = 1;
   CLOSE = 2;
   NOT_YET = 3;
+  ABSTAIN = 4;
 }
 
-// Trial represents a single speech therapy attempt
-message Trial {
-  string trial_id = 1;
+enum CueLevel {
+  CUE_LEVEL_UNSPECIFIED = 0;
+  L0 = 1;
+  L1 = 2;
+  L2 = 3;
+  L3 = 4;
+  L4 = 5;
+  L5 = 6;
+}
+
+enum PitchContour {
+  PITCH_UNSPECIFIED = 0;
+  RISING = 1;
+  FALLING = 2;
+  FLAT = 3;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  STIMULUS_PRESENTED = 1;
+  CUE_GIVEN = 2;
+  VOCALIZATION_DETECTED = 3;
+  ATTEMPT_RECORDED = 4;
+  PARENT_SCORED = 5;
+  SLP_SCORED = 6;
+  MODEL_SCORED = 7;
+  REINFORCEMENT_DELIVERED = 8;
+  TRIAL_ABORTED = 9;
+  CUE_ADVANCED = 10;
+  CUE_BACKED_OFF = 11;
+  TARGET_RETIRED_SAFETY = 12;
+  AVERSION_DETECTED = 13;
+  SESSION_CAPPED = 14;
+}
+
+// ============================================================================
+// TIER-1 SIGNALS
+// ============================================================================
+
+message Tier1Signals {
+  bool vocalization_detected = 1;
+  int32 latency_ms = 2;                    // stimulus offset -> vocalization onset
+  int32 duration_ms = 3;                   // phonation duration
+  int32 syllable_count = 4;                // estimated (may be 0 if abstained)
+  PitchContour pitch_contour = 5;
+  float snr_db = 6;                        // signal-to-noise ratio
+  bool abstained = 7;                      // true if SNR too low to compute signals
+  string abstention_reason = 8;            // "snr_too_low", "vad_weak", etc.
+}
+
+message CueModalities {
+  bool visual = 1;
+  bool gestural = 2;
+  bool rhythmic = 3;
+  bool frame = 4;
+}
+
+// ============================================================================
+// TRIAL EVENTS (IMMUTABLE LOG)
+// ============================================================================
+
+message TrialEvent {
+  string event_id = 1;                    // UUIDv7
   string session_id = 2;
   string child_id = 3;
-  string device_id = 4;
-  google.protobuf.Timestamp device_timestamp = 5;
-  google.protobuf.Timestamp server_timestamp = 6;
+  string trial_id = 4;
+  int32 ordinal = 5;                      // trial number in session
+  EventType event_type = 6;
+  string target_id = 7;
+  CueLevel cue_level = 8;
+  CueModalities cue_modalities = 9;
 
-  string target_word = 7;
-  int32 cue_level = 8; // 0-5
-  ScoreValue score = 9;
+  google.protobuf.Timestamp client_ts = 10;  // device timestamp
+  google.protobuf.Timestamp server_ts = 11;  // server ingestion timestamp
+  string device_id = 12;
+  string app_version = 13;
+  string protocol_version = 14;
+  string schema_version = 15;
 
-  // Tier 1 signals
-  bool tier1_vocalization_detected = 10;
-  int32 tier1_latency_ms = 11;
-  float tier1_snr_db = 12;
-  int32 tier1_syllable_estimate = 13;
+  // Tier-1 signals (populated on attempt_recorded event)
+  Tier1Signals tier1_signals = 16;
 
-  string audio_path = 14;
-  google.protobuf.Timestamp audio_retention_expires = 15;
+  // Additional metadata (event-specific)
+  map<string, string> payload = 17;  // event-specific fields
 }
 
-// UploadSessionRequest batch of trials from iOS
+// ============================================================================
+// REQUEST/RESPONSE MESSAGES
+// ============================================================================
+
 message UploadSessionRequest {
-  string session_id = 1;
-  string child_id = 2;
-  string device_id = 3;
-  repeated TrialData trials = 4;
+  string device_id = 1;                    // iOS IDFV
+  string session_id = 2;                   // local UUID
+  string child_id = 3;                     // must match auth token
+  repeated TrialEvent trial_events = 4;
+  repeated AudioUploadRef audio_refs = 5;
+  repeated ParentScore parent_scores = 6;
 }
 
-message TrialData {
+message AudioUploadRef {
+  string attempt_id = 1;
+  string s3_key = 2;
+  int64 bytes = 3;
+  string content_hash_sha256 = 4;         // hex-encoded
+}
+
+message ParentScore {
   string trial_id = 1;
-  google.protobuf.Timestamp device_timestamp = 2;
-
-  string target_word = 3;
-  int32 cue_level = 4;
-  ScoreValue score = 5;
-
-  bool tier1_vocalization_detected = 6;
-  int32 tier1_latency_ms = 7;
-  float tier1_snr_db = 8;
-  int32 tier1_syllable_estimate = 9;
-
-  string audio_path = 10;
+  ScoreValue value = 2;
+  google.protobuf.Timestamp tapped_at = 3;
 }
 
 message UploadSessionResponse {
-  int32 synced_count = 1;
-  repeated string synced_trial_ids = 2;
-  int32 duplicate_count = 3;
-  repeated string duplicate_trial_ids = 4;
-  int32 error_count = 5;
-  string message = 6;
+  int32 accepted_count = 1;
+  int32 error_count = 2;
+  int32 retry_after_ms = 3;
+  repeated string error_messages = 4;
 }
 
-// GetSessionTrialsRequest
 message GetSessionTrialsRequest {
   string session_id = 1;
-  string child_id = 2;
 }
 
 message GetSessionTrialsResponse {
-  repeated Trial trials = 1;
-  int32 total_count = 2;
+  repeated TrialWithScores trials = 1;
 }
 
-// GetChildProgressRequest
+message TrialWithScores {
+  string trial_id = 1;
+  int32 ordinal = 2;
+  string target_id = 3;
+  CueLevel cue_level = 4;
+  repeated Score scores = 5;
+  Tier1Signals tier1_signals = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message Score {
+  string score_id = 1;
+  string rater = 2;                       // "parent", "slp", "model:v1", etc.
+  ScoreValue value = 3;
+  float confidence = 4;                   // [0, 1]
+  google.protobuf.Timestamp created_at = 5;
+  string model_version = 6;               // null for human raters
+}
+
 message GetChildProgressRequest {
   string child_id = 1;
-  TimeRange time_range = 2;
-}
-
-enum TimeRange {
-  TIME_RANGE_UNSPECIFIED = 0;
-  THIS_WEEK = 1;
-  THIS_MONTH = 2;
-  ALL_TIME = 3;
-}
-
-message ChildProgress {
-  int32 attempt_count = 1;
-  float success_percentage = 2;
-  map<int32, int32> cue_level_distribution = 3; // cue_level -> count
-  float average_latency_ms = 4;
-  float average_snr_db = 5;
+  string program_id = 2;
+  int32 days_lookback = 3;                // default 84
 }
 
 message GetChildProgressResponse {
-  ChildProgress progress = 1;
+  repeated TargetProgress targets = 1;
+  google.protobuf.Timestamp computed_at = 2;
 }
 
-// QueryTrialsRequest
+message TargetProgress {
+  string target_id = 1;
+  string ipa = 2;
+  float mastery_percent = 3;
+  int32 trials_at_level = 4;
+  int32 trials_to_criterion = 5;
+  CueLevel current_cue_level = 6;
+  google.protobuf.Timestamp last_attempt = 7;
+  int32 total_attempts = 8;
+}
+
 message QueryTrialsRequest {
   string child_id = 1;
-  google.protobuf.Timestamp start_date = 2;
-  google.protobuf.Timestamp end_date = 3;
-  string target_word = 4;
-  int32 cue_level = 5; // -1 means all levels
-  int32 limit = 6;
-  int32 offset = 7;
-}
-
-message QueryTrialsResponse {
-  repeated TrialDetail trials = 1;
-  int32 total_count = 2;
-  int32 offset = 3;
-}
-
-message TrialDetail {
-  Trial trial = 1;
-  string audio_status = 2; // "available", "expired", "deleted"
+  google.protobuf.Timestamp date_from = 2;
+  google.protobuf.Timestamp date_to = 3;
+  string target_id = 4;
+  EventType event_type = 5;
+  int32 page_size = 6;
+  string page_token = 7;
 }

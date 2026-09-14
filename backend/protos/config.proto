@@ -1,100 +1,174 @@
 syntax = "proto3";
 
-package praxia.config.v1;
+package praxia.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/praxia-ai/backend/pkg/gen/config/v1";
+option go_package = "github.com/praxia-ai/backend/pkg/gen/praxia/v1;praxiav1";
+option swift_prefix = "Praxia";
 
-// ConfigService manages therapy program configuration
+// ConfigService provides program, target, and hierarchy configuration
 service ConfigService {
-  rpc GetProgram(GetProgramRequest) returns (GetProgramResponse);
+  rpc GetProgram(GetProgramRequest) returns (Program);
   rpc GetTargets(GetTargetsRequest) returns (GetTargetsResponse);
-  rpc GetCueHierarchy(GetCueHierarchyRequest) returns (GetCueHierarchyResponse);
-  rpc GetAAC(GetAACRequest) returns (GetAACResponse);
+  rpc GetCueHierarchy(GetCueHierarchyRequest) returns (CueHierarchy);
+  rpc GetAAC(GetAACRequest) returns (AACBoard);
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
 }
 
-// GetProgramRequest
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum CueLevel {
+  CUE_LEVEL_UNSPECIFIED = 0;
+  L0 = 1;
+  L1 = 2;
+  L2 = 3;
+  L3 = 4;
+  L4 = 5;
+  L5 = 6;
+}
+
+enum SyllableShape {
+  SHAPE_UNSPECIFIED = 0;
+  V = 1;      // vowel
+  CV = 2;     // consonant-vowel
+  VC = 3;     // vowel-consonant
+  CVCV = 4;
+  CVC = 5;
+  CVCVC = 6;
+}
+
+enum WordType {
+  WORD_TYPE_UNSPECIFIED = 0;
+  WORD = 1;
+  NONWORD = 2;
+}
+
+// ============================================================================
+// CONFIGURATION MESSAGES
+// ============================================================================
+
 message GetProgramRequest {
-  string child_id = 1;
+  string program_id = 1;
 }
 
 message Program {
-  string id = 1;
-  string name = 2;
+  string program_id = 1;
+  string name = 2;                        // e.g., "CAS Standard", "Intensive"
   int32 version = 3;
-  string description = 4;
-  google.protobuf.Timestamp created_at = 5;
+  CueHierarchy cue_hierarchy = 4;
+  AdvancementRule advancement_rule = 5;
+  BackoffRule backoff_rule = 6;
+  SafetyStopRule safety_stop_rule = 7;
+  int32 trial_target = 8;                 // trials per session target
+  int32 session_duration_sec = 9;         // max session length (e.g., 600 = 10 min)
+  google.protobuf.Timestamp created_at = 10;
 }
 
-message GetProgramResponse {
-  Program program = 1;
+message AdvancementRule {
+  int32 correct_count = 1;                // default 3 (3-up)
 }
 
-// GetTargetsRequest
+message BackoffRule {
+  int32 incorrect_count = 1;              // default 2 (2-down)
+}
+
+message SafetyStopRule {
+  int32 trials = 1;                       // sample size (default 10)
+  float accuracy_threshold = 2;           // (default 0.4 = 40%)
+}
+
+message CueHierarchy {
+  map<string, CueDefinition> levels = 1;  // "L0" -> CueDefinition, etc.
+}
+
+message CueDefinition {
+  string level_name = 1;                  // "L0", "L1", etc.
+  string description = 2;                 // human-readable
+  bool visual_cue = 3;
+  bool gestural_cue = 4;
+  bool rhythmic_cue = 5;
+  bool frame_cue = 6;
+}
+
+// ============================================================================
+// TARGET CONFIGURATION
+// ============================================================================
+
 message GetTargetsRequest {
-  string child_id = 1;
-  string program_id = 2;
-}
-
-message Target {
-  string id = 1;
-  string word = 2;
-  string phonetic_features = 3; // IPA
-  float stimulability_score = 4;
-  google.protobuf.Timestamp created_at = 5;
+  string program_id = 1;
 }
 
 message GetTargetsResponse {
   repeated Target targets = 1;
+  google.protobuf.Timestamp fetched_at = 2;
 }
 
-// GetCueHierarchyRequest
+message Target {
+  string target_id = 1;
+  string ipa = 2;                         // e.g., "ba", "kæt", "ʃ"
+  SyllableShape syllable_shape = 3;
+  WordType word_or_nonword = 4;
+  string phoneme_class = 5;               // e.g., "stop", "nasal", "fricative"
+  bool is_vowel = 6;
+  string image_asset_url = 7;             // signed S3 URL
+  string model_audio_url = 8;             // signed S3 URL (exemplar)
+  string model_video_url = 9;             // signed S3 URL (slowed video)
+  int32 sequence_length = 10;             // 1 for single phone, 2+ for sequences
+  string stress_pattern = 11;             // e.g., "primary", "secondary"
+  google.protobuf.Timestamp created_at = 12;
+}
+
+// ============================================================================
+// CUE HIERARCHY
+// ============================================================================
+
 message GetCueHierarchyRequest {
-  string target_id = 1;
-  string program_id = 2;
+  string program_id = 1;
 }
 
-message CueLevel {
-  int32 level = 1; // 0-5
-  string description = 2;
-  string visual_cue = 3;
-  string gestural_cue = 4;
-  string rhythmic_cue = 5;
-  string frame_cue = 6;
-}
+// CueHierarchy defined above; re-exported for convenience
 
-message CueHierarchy {
-  string target_id = 1;
-  int32 version = 2;
-  repeated CueLevel levels = 3;
-  google.protobuf.Timestamp created_at = 4;
-}
+// ============================================================================
+// AAC BOARD
+// ============================================================================
 
-message GetCueHierarchyResponse {
-  CueHierarchy hierarchy = 1;
-}
-
-// GetAACRequest
 message GetAACRequest {
   string child_id = 1;
 }
 
-message AACCell {
-  int32 position = 1; // 0-7 for 8-cell board
-  string emoji = 2;
-  string text = 3;
-  string target_word = 4;
-  bool active = 5;
-}
-
 message AACBoard {
-  string child_id = 1;
-  repeated AACCell cells = 2;
-  int32 version = 3;
-  google.protobuf.Timestamp created_at = 4;
+  repeated AACCell cells = 1;             // 40 cells, positions 0-39
+  google.protobuf.Timestamp generated_at = 2;
 }
 
-message GetAACResponse {
-  AACBoard board = 1;
+message AACCell {
+  int32 position = 1;                     // 0-39, position on the grid
+  string symbol_url = 2;                  // signed S3 URL to the symbol image
+  string label = 3;                       // word/phrase text
+  string target_id = 4;                   // reference to a speech target (may be null for core vocab)
+  bool is_core_vocabulary = 5;
+}
+
+// ============================================================================
+// CONFIG UPDATE (CLINICIAN PORTAL)
+// ============================================================================
+
+message UpdateConfigRequest {
+  string clinician_id = 1;
+  string child_id = 2;
+  string program_id = 3;
+  repeated string retire_target_ids = 4;
+  repeated string activate_target_ids = 5;
+  map<string, int32> cue_level_overrides = 6;  // target_id -> L0-L5 (as int)
+  int32 expected_version = 7;             // optimistic concurrency
+}
+
+message UpdateConfigResponse {
+  bool success = 1;
+  int32 version = 2;
+  string error_message = 3;
+  google.protobuf.Timestamp updated_at = 4;
 }

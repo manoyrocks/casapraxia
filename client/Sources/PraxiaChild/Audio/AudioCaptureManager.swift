@@ -78,6 +78,13 @@ actor AudioCaptureManager: NSObject, AVAudioEngineDelegate {
 
         engine.attachNode(inputNode)
         try? engine.start()
+
+        // Setup audio session interruption handling
+        setupAudioSessionInterruption()
+    }
+
+    deinit {
+        cleanup()
     }
 
     // MARK: - Public API
@@ -393,6 +400,70 @@ actor AudioCaptureManager: NSObject, AVAudioEngineDelegate {
         // NOTE: This must be done AFTER attaching nodes to the engine
         let inputNode = engine.inputNode
         inputNode.setVoiceProcessingEnabled(false)
+    }
+
+    // MARK: - Production Hardening
+
+    /// Setup audio session interruption handling (phone call, VoIP notification, etc.)
+    private func setupAudioSessionInterruption() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            // Pause on interruption (phone call, alarm, etc.)
+            Task {
+                try? await endAttempt()
+                print("📞 Audio session interrupted, attempt paused")
+            }
+        case .ended:
+            // Resume if possible
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt,
+               AVAudioSession.InterruptionOptions(rawValue: optionsValue).contains(.shouldResume) {
+                print("📱 Audio session resumed after interruption")
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    /// Cleanup resources (called on deinit)
+    private func cleanup() {
+        // Remove notification observers
+        NotificationCenter.default.removeObserver(self)
+
+        // Stop audio engine
+        if engine.isRunning {
+            try? engine.stop()
+        }
+
+        // Remove input tap
+        inputNode.removeTap(onBus: 0)
+
+        // Clear callbacks
+        tier1Callback = nil
+
+        // Clear current attempt
+        currentAttempt = nil
+
+        print("🧹 AudioCaptureManager cleaned up")
+    }
+
+    /// Safely end current attempt (graceful degradation)
+    private func endAttempt() async {
+        currentAttempt = nil
     }
 }
 
